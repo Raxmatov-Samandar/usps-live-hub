@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>USPS Live Hub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✉️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #10102A; --surface: #17173A; --raise: #20204B; --line: #2D2D5C;
+  --text: #EEEDFF; --muted: #9C9AC9; --accent: #5EE6D0;
+  --open: #4BE3A2; --soon: #FFC24B; --exp: #FF5D7D; --team: #B993FF; --solo: #52C7F7;
+  --badge-l: 72%; --badge-a: .17;
+  --font: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --cond: "Barlow Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #F3F2FB; --surface: #FFFFFF; --raise: #F7F6FD; --line: #DCDAF0;
+    --text: #16153A; --muted: #615F8C; --accent: #0E9C88;
+    --open: #0F9D6B; --soon: #B57A00; --exp: #D63358; --team: #7A4FE0; --solo: #0A86C2;
+    --badge-l: 36%; --badge-a: .13;
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text); font: 15px/1.45 var(--font); font-variant-numeric: tabular-nums;
+  min-height: 100vh; padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1340px; margin: 0 auto; padding: 0 22px; }
+
+/* ---------- header ---------- */
+.top {
+  position: sticky; top: 0; z-index: 6;
+  background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px);
+}
+.top .wrap { display: flex; align-items: center; gap: 14px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 11px; margin-right: auto; }
+.brand h1 { font: 700 24px/1 var(--cond); margin: 0; letter-spacing: .01em; }
+.brand small { display: block; color: var(--muted); font: 500 12.5px/1.2 var(--font); margin-top: 3px; }
+.mark { width: 34px; height: 34px; flex: none; }
+.etclock { font: 600 18px/1 var(--cond); color: var(--text); }
+.etclock span { color: var(--muted); font: 500 12px var(--font); margin-left: 4px; }
+.conn { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.conn i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.conn b { font-weight: 600; }
+.conn[data-s="live"] i { background: var(--open); animation: pulse 2.4s infinite; }
+.conn[data-s="live"] b { color: var(--open); }
+.conn[data-s="warn"] i { background: var(--soon); }
+.conn[data-s="warn"] b { color: var(--soon); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--open) 60%, transparent); } 70%,100% { box-shadow: 0 0 0 8px transparent; } }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 10px; cursor: pointer; font-size: 13px; color: var(--muted);
+}
+.icon-btn:hover { color: var(--text); }
+.icon-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- pulse (summary) ---------- */
+.pulse { display: grid; grid-template-columns: 1.7fr 1fr 1.15fr; gap: 14px; padding: 20px 0 6px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+.panel h2 { margin: 0 0 12px; font: 500 13px/1 var(--font); color: var(--muted); }
+.total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.total b { font: 700 46px/.9 var(--cond); }
+.total span { color: var(--muted); }
+.bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--raise); gap: 2px; }
+.bar i { display: block; height: 100%; transition: flex-grow .5s ease; flex-basis: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.legend button {
+  display: inline-flex; align-items: center; gap: 7px; border: 1px solid transparent; background: none;
+  border-radius: 8px; padding: 5px 9px; cursor: pointer; color: var(--muted);
+}
+.legend button:hover { background: var(--raise); }
+.legend button[aria-pressed="true"] { background: var(--raise); border-color: var(--line); color: var(--text); }
+.legend button i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+.legend button b { font: 700 19px/1 var(--cond); color: var(--c); }
+.split { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.split div b { font: 700 34px/.9 var(--cond); }
+.split div:last-child { text-align: right; }
+.split small { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+.next { display: grid; gap: 10px; }
+.next .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.next .clock { font: 700 34px/.9 var(--cond); color: var(--c, var(--text)); }
+.next .who { font: 600 16px/1.2 var(--cond); text-align: right; }
+.next .who small { display: block; color: var(--muted); font: 500 13px/1.3 var(--font); }
+.next .last { color: var(--muted); font-size: 13.5px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.next .last b { color: var(--text); font-weight: 600; }
+.next button { all: unset; cursor: pointer; display: block; border-radius: 8px; }
+
+/* ---------- filters ---------- */
+.filters { display: grid; gap: 12px; padding: 14px 0 12px; }
+.frow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.search { flex: 1 1 280px; display: flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 0 13px; }
+.search input { flex: 1; border: 0; background: none; padding: 11px 0; outline: none; min-width: 0; }
+.search svg { flex: none; color: var(--muted); }
+.search:focus-within { border-color: var(--accent); }
+select { background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 10px; }
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.states { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; align-items: center; }
+.states > span { color: var(--muted); font-size: 13px; margin-right: 4px; flex: none; }
+.chip {
+  flex: none; display: inline-flex; align-items: baseline; gap: 5px; cursor: pointer;
+  border: 1px solid transparent; border-radius: 8px; padding: 4px 9px;
+  font: 700 14px/1.3 var(--cond); letter-spacing: .04em;
+  color: hsl(var(--h) 80% var(--badge-l)); background: hsl(var(--h) 75% 60% / var(--badge-a));
+}
+.chip em { font-style: normal; font-weight: 500; opacity: .75; }
+.chip[aria-pressed="true"] { border-color: hsl(var(--h) 80% var(--badge-l)); box-shadow: inset 0 0 0 1px hsl(var(--h) 80% var(--badge-l)); }
+.states .clear { color: var(--accent); background: none; border: 1px dashed var(--line); font: 500 13px/1.3 var(--font); letter-spacing: 0; }
+
+/* ---------- table ---------- */
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.cols, .load {
+  display: grid; gap: 12px; align-items: center;
+  grid-template-columns: 132px 52px minmax(120px, 1fr) minmax(130px, 1.15fr) minmax(150px, 1.1fr) 70px 62px 78px 86px 58px 66px;
+}
+.cols { padding: 11px 18px; color: var(--muted); font-size: 12.5px; border-bottom: 1px solid var(--line); background: var(--raise); }
+.cols .r { text-align: right; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li + li { border-top: 1px solid var(--line); }
+.load { position: relative; padding: 13px 18px 15px; cursor: pointer; }
+.load:hover { background: color-mix(in srgb, var(--raise) 75%, transparent); }
+.load.is-new { animation: arrive 4s ease-out; }
+@keyframes arrive { 0% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }
+.load > *, .load .grp > * { grid-row: 1; min-width: 0; }
+.grp { display: contents; }
+
+.c-id { grid-column: 1; display: flex; align-items: center; gap: 4px; font: 600 16px/1 var(--cond); letter-spacing: .02em; }
+.copy { border: 0; background: none; padding: 4px; border-radius: 6px; color: var(--muted); cursor: pointer; display: inline-flex; opacity: .55; }
+.copy:hover, .load:hover .copy { opacity: 1; }
+.c-st { grid-column: 2; }
+.badge {
+  display: inline-block; min-width: 36px; text-align: center; border-radius: 7px; padding: 4px 6px;
+  font: 700 13px/1 var(--cond); letter-spacing: .05em;
+  color: hsl(var(--h) 80% var(--badge-l)); background: hsl(var(--h) 75% 60% / var(--badge-a));
+}
+.c-o { grid-column: 3; } .c-d { grid-column: 4; }
+.city { font: 600 17px/1.15 var(--cond); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.city span { color: var(--muted); font-weight: 500; margin-left: 5px; }
+.via { display: block; color: var(--muted); font-size: 12.5px; }
+.c-pu { grid-column: 5; font-size: 14px; }
+.c-pu small { display: block; color: var(--muted); font-size: 12.5px; }
+.c-mi { grid-column: 6; text-align: right; font: 600 17px/1 var(--cond); }
+.c-ty { grid-column: 7; }
+.type { display: inline-block; font: 700 12.5px/1 var(--cond); letter-spacing: .07em; padding: 5px 8px; border-radius: 6px; }
+.type.TEAM { color: var(--team); background: color-mix(in srgb, var(--team) 15%, transparent); }
+.type.SOLO { color: var(--solo); background: color-mix(in srgb, var(--solo) 15%, transparent); }
+.c-en { grid-column: 8; font: 700 21px/1 var(--cond); }
+[data-st="open"] .c-en { color: var(--open); }
+[data-st="soon"] .c-en { color: var(--soon); }
+[data-st="exp"] .c-en { color: var(--exp); }
+[data-st="ended"] .c-en { color: var(--muted); font-size: 16px; }
+.c-ss { grid-column: 9; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+[data-st="open"] .status { color: var(--open); }
+[data-st="soon"] .status { color: var(--soon); }
+[data-st="exp"] .status { color: var(--exp); }
+[data-st="exp"] .status i { animation: blink 1s steps(2) infinite; }
+[data-st="ended"] .status { color: var(--muted); }
+@keyframes blink { 50% { opacity: .2; } }
+.c-po { grid-column: 10; text-align: right; color: var(--muted); font-size: 14px; }
+.c-ac { grid-column: 11; display: flex; gap: 4px; justify-content: flex-end; }
+.act { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; color: var(--muted); border: 1px solid var(--line); background: var(--raise); }
+.act:hover { color: var(--accent); border-color: var(--accent); }
+.act[aria-disabled="true"] { opacity: .3; pointer-events: none; }
+[data-st="ended"] .city, [data-st="ended"] .c-id, [data-st="ended"] .c-mi { color: var(--muted); }
+
+/* the fuse: time left to bid */
+.fuse { position: absolute; left: 18px; right: 18px; bottom: 5px; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--line) 70%, transparent); overflow: hidden; }
+.fuse i { display: block; height: 100%; width: var(--w, 100%); border-radius: 3px; background: var(--open); transition: width 1s linear; }
+[data-st="soon"] .fuse i { background: var(--soon); }
+[data-st="exp"] .fuse i { background: var(--exp); }
+[data-st="ended"] .fuse { display: none; }
+
+.empty { padding: 60px 16px; text-align: center; color: var(--muted); }
+.empty strong { display: block; color: var(--text); font: 600 22px/1.2 var(--cond); margin-bottom: 6px; }
+
+/* ---------- drawer ---------- */
+dialog { margin: 0 0 0 auto; height: 100%; max-height: 100%; width: min(460px, 100%); border: 0; border-left: 1px solid var(--line); padding: 0; background: var(--surface); color: var(--text); }
+dialog::backdrop { background: rgb(6 6 24 / .6); }
+dialog[open] { animation: slide .22s ease-out; }
+@keyframes slide { from { transform: translateX(24px); opacity: .4; } }
+.dr { display: flex; flex-direction: column; min-height: 100%; padding: calc(20px + env(safe-area-inset-top, 0px)) 22px calc(22px + env(safe-area-inset-bottom, 0px)); gap: 20px; }
+.dr-head { display: flex; align-items: flex-start; gap: 12px; }
+.dr-head h2 { font: 700 30px/1 var(--cond); margin: 0; }
+.dr-head p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.dr-head .x { margin-left: auto; }
+.dr-timer { background: var(--raise); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden; }
+.dr-timer .c-en { font-size: 36px; }
+.dr-timer .fuse { left: 0; right: 0; bottom: 0; height: 4px; border-radius: 0; }
+.dr-timer p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin: 0; }
+.facts dt { color: var(--muted); font-size: 13px; }
+.facts dd { margin: 3px 0 0; font-weight: 500; }
+.stops { list-style: none; margin: 0; padding: 0; }
+.stops li { position: relative; padding: 0 0 18px 30px; }
+.stops li::before { content: counter(list-item); position: absolute; left: 0; top: 1px; width: 20px; height: 20px; border-radius: 50%; background: var(--raise); border: 1px solid var(--line); font: 600 12px/18px var(--cond); text-align: center; color: var(--muted); }
+.stops li:not(:last-child)::after { content: ""; position: absolute; left: 10px; top: 24px; bottom: 2px; border-left: 1px dashed var(--line); }
+.stops strong { display: block; font: 600 18px/1.2 var(--cond); }
+.stops span { color: var(--muted); font-size: 13.5px; }
+.actions { display: grid; gap: 10px; margin-top: auto; }
+.btn { display: flex; justify-content: center; align-items: center; gap: 8px; text-decoration: none; border-radius: 10px; padding: 12px 14px; font-weight: 600; cursor: pointer; background: var(--raise); border: 1px solid var(--line); color: var(--text); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #0B1F1C; }
+.btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+.toast.on { opacity: 1; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .cols, .load { grid-template-columns: 124px 50px minmax(110px, 1fr) minmax(120px, 1.1fr) minmax(140px, 1fr) 66px 60px 74px 54px 62px; }
+  .c-ss { display: none !important; }
+  .c-po { grid-column: 9; } .c-ac { grid-column: 10; }
+}
+@media (max-width: 1000px) { .pulse { grid-template-columns: 1fr 1fr; } .pulse .panel:first-child { grid-column: 1 / -1; } }
+@media (max-width: 820px) {
+  .wrap { padding: 0 14px; }
+  .brand small, .etclock span { display: none; }
+  .pulse { grid-template-columns: 1fr; gap: 10px; padding-top: 14px; }
+  .pulse .panel:first-child { grid-column: auto; }
+  .panel { padding: 14px; }
+  .total b { font-size: 38px; }
+  .board { border-radius: 12px; }
+  .cols { display: none; }
+  .load {
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas: "id st . en" "o o o o" "d d d d" "pu pu pu pu" "mi ty ac ac";
+    gap: 6px 10px; padding: 14px 14px 18px;
+  }
+  .load > *, .load .grp > * { grid-row: auto; grid-column: auto; }
+  .c-id { grid-area: id; } .c-st { grid-area: st; } .c-en { grid-area: en; text-align: right; }
+  .c-o { grid-area: o; } .c-d { grid-area: d; } .c-pu { grid-area: pu; }
+  .c-mi { grid-area: mi; text-align: left; font-size: 15px; } .c-ty { grid-area: ty; } .c-ac { grid-area: ac; }
+  .c-o::before, .c-d::before { color: var(--muted); font-size: 12.5px; margin-right: 6px; float: left; line-height: 20px; width: 34px; }
+  .c-o::before { content: "From"; } .c-d::before { content: "To"; }
+  .c-ss, .c-po { display: none !important; }
+  .fuse { left: 14px; right: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="10" fill="var(--raise)" stroke="var(--line)"/>
+        <path d="M11 14h18v12H11z" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="m11 14 9 7 9-7" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M5 18h4M4 22h5M6 26h3" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div><h1>USPS Live Hub</h1><small>Spot loads the moment they post</small></div>
+    </div>
+    <span class="etclock" id="etclock" title="Current time, US Eastern">--:--<span>ET</span></span>
+    <span class="conn" id="conn" data-s="warn" role="status"><i></i><b>Connecting</b></span>
+    <button class="icon-btn" id="sound" aria-pressed="false" title="Play a sound when a new load arrives" aria-label="Sound for new loads">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="pulse" aria-label="Board summary">
+    <div class="panel">
+      <h2>Live on the board</h2>
+      <div class="total"><b id="tTotal">0</b><span id="tTotalLbl">loads open for bidding</span></div>
+      <div class="bar" id="statusBar"><i style="background:var(--open)"></i><i style="background:var(--soon)"></i><i style="background:var(--exp)"></i></div>
+      <div class="legend" id="statusSeg" role="group" aria-label="Filter by status">
+        <button data-v="all" aria-pressed="true" style="--c:var(--text)">All <b data-c="all">0</b></button>
+        <button data-v="open" aria-pressed="false" style="--c:var(--open)"><i></i>Open <b data-c="open">0</b></button>
+        <button data-v="soon" aria-pressed="false" style="--c:var(--soon)"><i></i>Ending soon <b data-c="soon">0</b></button>
+        <button data-v="exp" aria-pressed="false" style="--c:var(--exp)"><i></i>Expiring <b data-c="exp">0</b></button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Driver type</h2>
+      <div class="split">
+        <div><b style="color:var(--team)" data-c="TEAM">0</b><small>Team</small></div>
+        <div><b style="color:var(--solo)" data-c="SOLO">0</b><small>Solo</small></div>
+      </div>
+      <div class="bar" id="typeBar"><i style="background:var(--team)"></i><i style="background:var(--solo)"></i></div>
+      <div class="legend" id="typeSeg" role="group" aria-label="Filter by driver type">
+        <button data-v="all" aria-pressed="true" style="--c:var(--text)">Any driver</button>
+        <button data-v="TEAM" aria-pressed="false" style="--c:var(--team)"><i></i>Team</button>
+        <button data-v="SOLO" aria-pressed="false" style="--c:var(--solo)"><i></i>Solo</button>
+      </div>
+    </div>
+    <div class="panel next" id="nextPanel">
+      <h2 style="margin:0">Closing next</h2>
+      <div id="nextBody"></div>
+      <div class="last" id="lastPosted">Waiting for the first load</div>
+    </div>
+  </section>
+
+  <section class="filters" aria-label="Filters">
+    <div class="frow">
+      <label class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Search load number, city, state or ZIP" autocomplete="off">
+      </label>
+      <select id="sort" aria-label="Sort">
+        <option value="new">Newest first</option>
+        <option value="ends">Ending soonest</option>
+        <option value="pickup">Earliest pickup</option>
+        <option value="milesDesc">Longest miles</option>
+        <option value="milesAsc">Shortest miles</option>
+      </select>
+      <label class="check"><input type="checkbox" id="showExpired"> Show ended loads</label>
+    </div>
+    <div class="states" id="states" role="group" aria-label="Origin state"></div>
+  </section>
+
+  <section class="board" aria-label="Loads">
+    <div class="cols" aria-hidden="true">
+      <span>Load</span><span>State</span><span>Origin</span><span>Destination</span><span>Pickup</span>
+      <span class="r">Miles</span><span>Type</span><span>Ends in</span><span class="c-ss">Status</span><span class="r" style="white-space:nowrap">Posted ET</span><span></span>
+    </div>
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="empty" hidden></div>
+  </section>
+  <div style="height:28px"></div>
+</main>
+
+<dialog id="drawer" aria-labelledby="drTitle"><div class="dr" id="dr"></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("hub:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("hub:" + k, JSON.stringify(v)); } catch {} },
+  };
+
+  let TTL = 30 * 60e3, clockSkew = 0, unseen = 0, openId = null;
+  const loads = new Map(), fresh = new Set();
+  const f = {
+    status: store.get("status2", "all"), type: store.get("type", "all"),
+    states: new Set(store.get("states", [])), q: "", sort: store.get("sort", "new"),
+    expired: store.get("expired", false), sound: store.get("sound", false),
+  };
+  if (!["all", "open", "soon", "exp"].includes(f.status)) f.status = "all";
+
+  // ---------- helpers ----------
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const now = () => Date.now() + clockSkew;
+  const title = s => s.toLowerCase().replace(/\b([a-z])/g, m => m.toUpperCase());
+  const TZ = {};
+  "CT DE DC FL GA IN KY ME MD MA MI NH NJ NY NC OH PA RI SC VT VA WV".split(" ").forEach(s => TZ[s] = "ET");
+  "AL AR IL IA KS LA MN MS MO NE ND OK SD TN TX WI".split(" ").forEach(s => TZ[s] = "CT");
+  "AZ CO ID MT NM UT WY".split(" ").forEach(s => TZ[s] = "MT");
+  "CA NV OR WA".split(" ").forEach(s => TZ[s] = "PT");
+  TZ.AK = "AKT"; TZ.HI = "HT";
+  const hue = st => { let h = 0; for (const c of String(st)) h = (h * 31 + c.charCodeAt(0)) % 360; return (h * 7 + 40) % 360; };
+  const ET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+  const ET12 = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+
+  function place(stop) {
+    const m = String(stop || "").match(/^(.*?),\s*([A-Z]{2})\s*(\d{5})?/);
+    return m ? { city: title(m[1]), st: m[2], zip: m[3] || "" } : { city: title(stop || "—"), st: "", zip: "" };
+  }
+  function parseUS(s) {
+    const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!m) return null;
+    let h = +m[4] % 12; if (/pm/i.test(m[6])) h += 12;
+    return { mo: +m[1], d: +m[2], h, mi: +m[5], key: Date.UTC(+m[3], +m[1] - 1, +m[2], h, +m[5]) };
+  }
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtUS(s, tz) {
+    const p = parseUS(s); if (!p) return esc(s || "—");
+    return `${MON[p.mo - 1]} ${p.d}, ${p.h % 12 || 12}:${String(p.mi).padStart(2, "0")} ${p.h < 12 ? "AM" : "PM"}${tz ? " " + tz : ""}`;
+  }
+  const miles = l => parseFloat(String(l.distance || "").replace(/[^\d.]/g, "")) || 0;
+  const created = l => Date.parse(l.created_at);
+  const left = l => created(l) + TTL - now();
+  function status(l) {
+    const ms = left(l);
+    if (ms <= 0) return "ended";
+    if (ms <= 5 * 60e3) return "exp";
+    if (ms <= 15 * 60e3) return "soon";
+    return "open";
+  }
+  const LABEL = { open: "Open", soon: "Ending soon", exp: "Expiring", ended: "Ended" };
+  function clock(ms) {
+    if (ms <= 0) return "Ended";
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  const fuseW = l => Math.max(0, Math.min(100, left(l) / TTL * 100)).toFixed(2) + "%";
+  const postedET = l => ET.format(new Date(created(l)));
+  function ago(ms) {
+    const m = Math.round(ms / 60e3);
+    return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`;
+  }
+  const I = {
+    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+    map: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    tg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 3-9.5 18-2.5-8-8-2.5L22 3Z"/><path d="m10 13 5-5"/></svg>',
+  };
+
+  // ---------- filtering ----------
+  function matches(l, ignore) {
+    const st = status(l);
+    if (!f.expired && st === "ended") return false;
+    if (ignore !== "status" && f.status !== "all" && st !== f.status) return false;
+    if (ignore !== "type" && f.type !== "all" && l.load_type !== f.type) return false;
+    if (ignore !== "state" && f.states.size && !f.states.has(l.state_code)) return false;
+    if (f.q) {
+      const hay = [l.order_id, l.state_code, ...(l.stops || []), ...(l.stop_addresses || [])].join(" ").toLowerCase();
+      if (!f.q.split(/\s+/).every(w => hay.includes(w))) return false;
+    }
+    return true;
+  }
+  function sorted(arr) {
+    const by = {
+      new: (a, b) => created(b) - created(a),
+      ends: (a, b) => left(a) - left(b),
+      pickup: (a, b) => (parseUS(a.pickup_time)?.key ?? 9e15) - (parseUS(b.pickup_time)?.key ?? 9e15),
+      milesDesc: (a, b) => miles(b) - miles(a),
+      milesAsc: (a, b) => miles(a) - miles(b),
+    }[f.sort] || ((a, b) => created(b) - created(a));
+    return arr.sort(by);
+  }
+
+  // ---------- rendering ----------
+  function rowHTML(l) {
+    const stops = l.stops || [];
+    const o = place(stops[0]), d = place(stops[stops.length - 1]);
+    const extra = stops.length - 2, st = status(l), h = hue(l.state_code || o.st);
+    return `<li><div class="load${fresh.has(l.order_id) ? " is-new" : ""}" role="button" tabindex="0" data-id="${esc(l.order_id)}" data-st="${st}" style="--w:${fuseW(l)}" aria-label="Load ${esc(l.order_id)}, ${esc(o.city)} to ${esc(d.city)}">
+      <span class="c-id">#${esc(l.order_id)}<button class="copy" data-copy="${esc(l.order_id)}" aria-label="Copy load number" title="Copy load number">${I.copy}</button></span>
+      <span class="c-st"><span class="badge" style="--h:${h}">${esc(l.state_code || o.st || "—")}</span></span>
+      <span class="c-o"><span class="city">${esc(o.city)}<span>${esc(o.st)}</span></span></span>
+      <span class="c-d"><span class="city">${esc(d.city)}<span>${esc(d.st)}</span></span>${extra > 0 ? `<span class="via">+${extra} stop${extra > 1 ? "s" : ""} before</span>` : ""}</span>
+      <span class="c-pu">${fmtUS(l.pickup_time, TZ[o.st])}<small>Del ${fmtUS(l.delivery_time, TZ[d.st])}</small></span>
+      <span class="c-mi">${miles(l).toLocaleString("en-US", { maximumFractionDigits: 1 })}<small style="font:500 12px var(--font);color:var(--muted)"> mi</small></span>
+      <span class="c-ty"><span class="type ${esc(l.load_type)}">${esc(l.load_type || "—")}</span></span>
+      <span class="c-en" data-ends>${clock(left(l))}</span>
+      <span class="c-ss"><span class="status"><i></i><span data-lbl>${LABEL[st]}</span></span></span>
+      <span class="c-po">${postedET(l)}</span>
+      <span class="c-ac">
+        <a class="act" href="${esc(l.route_url || "#")}" target="_blank" rel="noopener" title="Open route in Google Maps" aria-label="Open route in Google Maps" ${l.route_url ? "" : 'aria-disabled="true"'}>${I.map}</a>
+        <a class="act" href="${esc(l.tg_url || "#")}" target="_blank" rel="noopener" title="${l.tg_url ? "Open Telegram post" : "Not posted to Telegram"}" aria-label="Open Telegram post" ${l.tg_url ? "" : 'aria-disabled="true"'}>${I.tg}</a>
+      </span>
+      <span class="fuse"><i style="width:var(--w)"></i></span>
+    </div></li>`;
+  }
+
+  function renderSummary() {
+    const c = { all: 0, open: 0, soon: 0, exp: 0, TEAM: 0, SOLO: 0 };
+    let next = null, last = null;
+    for (const l of loads.values()) {
+      const st = status(l);
+      if (!last || created(l) > created(last)) last = l;
+      if (st === "ended") continue;
+      if (matches(l, "status")) { c.all++; c[st]++; if (!next || left(l) < left(next)) next = l; }
+      if (matches(l, "type")) c[l.load_type] = (c[l.load_type] || 0) + 1;
+    }
+    document.querySelectorAll("[data-c]").forEach(b => b.textContent = c[b.dataset.c] || 0);
+    $("#tTotal").textContent = c.all;
+    $("#tTotalLbl").textContent = c.all === 1 ? "load open for bidding" : "loads open for bidding";
+    const sb = $("#statusBar").children;
+    [c.open, c.soon, c.exp].forEach((v, i) => sb[i].style.flexGrow = v);
+    const tb = $("#typeBar").children;
+    [c.TEAM || 0, c.SOLO || 0].forEach((v, i) => tb[i].style.flexGrow = v);
+
+    if (next) {
+      const o = place(next.stops?.[0]), d = place(next.stops?.[next.stops.length - 1]);
+      $("#nextBody").innerHTML = `<button data-open="${esc(next.order_id)}" aria-label="Open load ${esc(next.order_id)}"><div class="row1" data-st="${status(next)}">
+        <span class="clock c-en" id="nextClock">${clock(left(next))}</span>
+        <span class="who">#${esc(next.order_id)}<small>${esc(o.city)}, ${esc(o.st)} to ${esc(d.city)}, ${esc(d.st)}</small></span>
+      </div></button>`;
+      $("#nextBody").dataset.id = next.order_id;
+    } else {
+      $("#nextBody").innerHTML = `<div class="row1"><span class="clock" style="color:var(--muted)">–:––</span><span class="who"><small>No open loads</small></span></div>`;
+      $("#nextBody").dataset.id = "";
+    }
+    $("#lastPosted").innerHTML = last ? `Last load posted <b>${ago(now() - created(last))}</b> at ${ET12.format(new Date(created(last)))} ET` : "Waiting for the first load";
+
+    const per = {};
+    for (const l of loads.values()) if (matches(l, "state") && l.state_code) per[l.state_code] = (per[l.state_code] || 0) + 1;
+    f.states.forEach(s => per[s] ??= 0);
+    const keys = Object.keys(per).sort();
+    $("#states").innerHTML = (keys.length ? "<span>Origin state</span>" : "") + keys.map(s =>
+      `<button class="chip" style="--h:${hue(s)}" data-s="${esc(s)}" aria-pressed="${f.states.has(s)}">${esc(s)}<em>${per[s]}</em></button>`
+    ).join("") + (f.states.size ? `<button class="chip clear" data-s="">Clear</button>` : "");
+  }
+
+  function render() {
+    const list = sorted([...loads.values()].filter(l => matches(l)));
+    $("#list").innerHTML = list.map(rowHTML).join("");
+    renderSummary();
+    const empty = $("#empty");
+    if (list.length) { empty.hidden = true; return; }
+    empty.hidden = false;
+    const filtered = f.status !== "all" || f.type !== "all" || f.states.size || f.q;
+    empty.innerHTML = filtered
+      ? `<strong>No loads match these filters</strong>Loosen a filter to see more of the board.<br><br><button class="btn" id="reset" style="display:inline-flex">Reset filters</button>`
+      : `<strong>No open loads right now</strong>New loads appear here the moment they post.${f.expired ? "" : `<br><br><button class="btn" id="showEnded" style="display:inline-flex">Show ended loads</button>`}`;
+  }
+
+  let lastSig = "";
+  function tick() {
+    document.querySelectorAll(".load[data-id]").forEach(el => {
+      const l = loads.get(el.dataset.id); if (!l) return;
+      const st = status(l);
+      if (el.dataset.st !== st) { el.dataset.st = st; const lb = el.querySelector("[data-lbl]"); if (lb) lb.textContent = LABEL[st]; }
+      el.style.setProperty("--w", fuseW(l));
+      el.querySelector("[data-ends]").textContent = clock(left(l));
+    });
+    const nid = $("#nextBody").dataset.id;
+    if (nid && loads.has(nid)) { const n = loads.get(nid); $("#nextClock").textContent = clock(left(n)); $("#nextBody .row1").dataset.st = status(n); }
+    const t = new Date(now());
+    $("#etclock").firstChild.nodeValue = ET.format(t);
+    const sig = [...loads.values()].map(l => status(l)[0]).join("");
+    if (sig !== lastSig) { lastSig = sig; render(); }
+    else if (t.getSeconds() === 0) renderSummary();   // refresh "posted x min ago"
+    if (openId && loads.has(openId)) updateDrawerTimer();
+  }
+
+  // ---------- drawer ----------
+  function openDrawer(id) {
+    const l = loads.get(id); if (!l) return;
+    openId = id;
+    const stops = l.stops || [], addr = l.stop_addresses || [];
+    const o = place(stops[0]), d = place(stops[stops.length - 1]);
+    const link = `${location.origin}/board?load=${encodeURIComponent(id)}`;
+    $("#dr").innerHTML = `
+      <div class="dr-head">
+        <div><h2 id="drTitle">#${esc(id)}</h2><p>${esc(o.city)}, ${esc(o.st)} to ${esc(d.city)}, ${esc(d.st)}</p></div>
+        <button class="icon-btn x" data-close>Close</button>
+      </div>
+      <div class="dr-timer" data-st="${status(l)}" style="--w:${fuseW(l)}">
+        <span class="c-en" id="drEnds">${clock(left(l))}</span>
+        <p id="drNote"></p>
+        <span class="fuse"><i style="width:var(--w)"></i></span>
+      </div>
+      <dl class="facts">
+        <div><dt>Distance</dt><dd>${miles(l).toLocaleString("en-US")} miles</dd></div>
+        <div><dt>Driver</dt><dd><span class="type ${esc(l.load_type)}">${esc(l.load_type || "—")}</span></dd></div>
+        <div><dt>Pickup</dt><dd>${fmtUS(l.pickup_time, TZ[o.st])}</dd></div>
+        <div><dt>Delivery</dt><dd>${fmtUS(l.delivery_time, TZ[d.st])}</dd></div>
+        <div><dt>Posted</dt><dd>${ET12.format(new Date(created(l)))} ET</dd></div>
+        <div><dt>Bidding ends</dt><dd>${ET12.format(new Date(created(l) + TTL))} ET</dd></div>
+      </dl>
+      <ol class="stops">${stops.map((s, i) => {
+        const p = place(s);
+        return `<li><strong>${esc(p.city)}, ${esc(p.st)} ${esc(p.zip)}</strong><span>${esc(addr[i] || "")}</span></li>`;
+      }).join("")}</ol>
+      <div class="actions">
+        <a class="btn primary" href="${esc(l.route_url || "#")}" target="_blank" rel="noopener" ${l.route_url ? "" : 'aria-disabled="true"'}>Open route in Google Maps</a>
+        <a class="btn" href="${esc(l.tg_url || "#")}" target="_blank" rel="noopener" ${l.tg_url ? "" : 'aria-disabled="true"'}>${l.tg_url ? "Open Telegram post" : "Not posted to Telegram"}</a>
+        <button class="btn" data-copy="${esc(id)}">Copy load number</button>
+        <button class="btn" data-copy="${esc(link)}" data-msg="Board link copied">Copy board link</button>
+      </div>`;
+    updateDrawerTimer();
+    const dlg = $("#drawer");
+    if (!dlg.open) dlg.showModal();
+    const u = new URL(location); u.searchParams.set("load", id); history.replaceState(null, "", u);
+  }
+  function updateDrawerTimer() {
+    const l = loads.get(openId), box = $(".dr-timer"); if (!l || !box) return;
+    const st = status(l);
+    box.dataset.st = st; box.style.setProperty("--w", fuseW(l));
+    $("#drEnds").textContent = clock(left(l));
+    $("#drNote").textContent = st === "ended" ? "Bidding closed" : `left to bid, ${LABEL[st].toLowerCase()}`;
+  }
+  $("#drawer").addEventListener("close", () => {
+    openId = null;
+    const u = new URL(location); u.searchParams.delete("load"); history.replaceState(null, "", u);
+  });
+  $("#drawer").addEventListener("click", e => {
+    if (e.target === e.currentTarget || e.target.closest("[data-close]")) $("#drawer").close();
+  });
+
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 1800);
+  }
+  async function copy(text, msg) {
+    try { await navigator.clipboard.writeText(text); toast(msg); }
+    catch { toast("Copy failed. Select the text and copy it manually."); }
+  }
+  document.addEventListener("click", e => {
+    const c = e.target.closest("[data-copy]");
+    if (c) { e.stopPropagation(); copy(c.dataset.copy, c.dataset.msg || `#${c.dataset.copy} copied`); }
+  }, true);
+
+  // ---------- sound + title ----------
+  let audio;
+  function beep() {
+    if (!f.sound) return;
+    try {
+      audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      const t = audio.currentTime;
+      [880, 1175].forEach((hz, i) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = "sine"; o.frequency.value = hz;
+        g.gain.setValueAtTime(0.0001, t + i * .12);
+        g.gain.exponentialRampToValueAtTime(0.22, t + i * .12 + .02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * .12 + .3);
+        o.connect(g).connect(audio.destination); o.start(t + i * .12); o.stop(t + i * .12 + .32);
+      });
+    } catch {}
+  }
+  function setTitle() { document.title = (unseen ? `(${unseen}) ` : "") + "USPS Live Hub"; }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { unseen = 0; setTitle(); } });
+
+  // ---------- data ----------
+  function setConn(s, text) { const c = $("#conn"); c.dataset.s = s; $("b", c).textContent = text; }
+  let sourceOnline = true, socketOpen = false;
+  function updateConn() {
+    if (!socketOpen) setConn("warn", "Reconnecting");
+    else if (!sourceOnline) setConn("warn", "Source offline");
+    else setConn("live", "Live");
+  }
+  async function loadAll() {
+    const r = await fetch("/api/loads", { cache: "no-store" });
+    const data = await r.json();
+    TTL = (data.ttl_min || 30) * 60e3;
+    clockSkew = Date.parse(data.server_time) - Date.now();
+    sourceOnline = data.source_online;
+    loads.clear();
+    data.loads.forEach(l => loads.set(l.order_id, l));
+    render(); updateConn();
+  }
+  function addLoad(l) {
+    const isNew = !loads.has(l.order_id);
+    loads.set(l.order_id, l);
+    if (isNew) {
+      fresh.add(l.order_id); setTimeout(() => fresh.delete(l.order_id), 4000);
+      if (matches(l)) { beep(); if (document.hidden) { unseen++; setTitle(); } }
+    }
+    render();
+    if (openId === l.order_id) openDrawer(openId);
+  }
+  let retry = 1000;
+  function connect() {
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+    let ping;
+    ws.onopen = async () => {
+      socketOpen = true; retry = 1000;
+      ping = setInterval(() => ws.readyState === 1 && ws.send("ping"), 25000);
+      try { await loadAll(); } catch {}
+    };
+    ws.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === "load" && m.load) addLoad(m.load);
+      if (m.type === "source") { sourceOnline = m.online; updateConn(); }
+    };
+    ws.onclose = () => {
+      socketOpen = false; clearInterval(ping); updateConn();
+      setTimeout(connect, retry); retry = Math.min(retry * 2, 20000);
+    };
+  }
+
+  // ---------- controls ----------
+  function bindSeg(id, key, storeKey) {
+    const seg = $(id);
+    seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === f[key]));
+    seg.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      f[key] = b.dataset.v; store.set(storeKey, f[key]);
+      seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+      render();
+    });
+  }
+  bindSeg("#statusSeg", "status", "status2");
+  bindSeg("#typeSeg", "type", "type");
+  $("#states").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const s = b.dataset.s;
+    if (!s) f.states.clear(); else f.states.has(s) ? f.states.delete(s) : f.states.add(s);
+    store.set("states", [...f.states]); render();
+  });
+  let qt; $("#q").addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value.trim().toLowerCase(); render(); }, 120); });
+  $("#sort").value = f.sort;
+  $("#sort").addEventListener("change", e => { f.sort = e.target.value; store.set("sort", f.sort); render(); });
+  $("#showExpired").checked = f.expired;
+  $("#showExpired").addEventListener("change", e => { f.expired = e.target.checked; store.set("expired", f.expired); render(); });
+  const snd = $("#sound"); snd.setAttribute("aria-pressed", f.sound);
+  snd.addEventListener("click", () => {
+    f.sound = !f.sound; store.set("sound", f.sound); snd.setAttribute("aria-pressed", f.sound);
+    if (f.sound) { beep(); toast("Sound on for new loads"); } else toast("Sound off");
+  });
+  $("#list").addEventListener("click", e => {
+    if (e.target.closest("a, button")) return;
+    const r = e.target.closest(".load"); if (r) openDrawer(r.dataset.id);
+  });
+  $("#list").addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("load")) { e.preventDefault(); openDrawer(e.target.dataset.id); }
+  });
+  $("#nextPanel").addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) openDrawer(b.dataset.open); });
+  $("#empty").addEventListener("click", e => {
+    if (e.target.id === "showEnded") { f.expired = true; $("#showExpired").checked = true; store.set("expired", true); render(); }
+    if (e.target.id === "reset") {
+      f.status = "all"; f.type = "all"; f.states.clear(); f.q = ""; $("#q").value = "";
+      store.set("status2", "all"); store.set("type", "all"); store.set("states", []);
+      document.querySelectorAll(".legend button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === "all"));
+      render();
+    }
+  });
+
+  // ---------- start ----------
+  (async () => {
+    try { await loadAll(); } catch { setConn("warn", "Server unreachable"); }
+    const want = new URLSearchParams(location.search).get("load");
+    if (want) {
+      if (!loads.has(want)) {
+        try {
+          const r = await fetch("/api/loads?hours=168", { cache: "no-store" });
+          const old = (await r.json()).loads.find(l => l.order_id === want);
+          if (old) loads.set(old.order_id, old);
+        } catch {}
+      }
+      loads.has(want) ? openDrawer(want) : toast(`Load #${want} is no longer on the board`);
+    }
+    connect();
+    tick(); setInterval(tick, 1000);
+  })();
+})();
+</script>
+</body>
+</html>
