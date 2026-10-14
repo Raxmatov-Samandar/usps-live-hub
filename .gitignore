@@ -1,0 +1,5 @@
+# Maxfiy sozlamalar va baza GitHub'ga yuklanmasin
+.env
+*.db
+__pycache__/
+*.pyc
