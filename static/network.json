@@ -1,0 +1,76 @@
+{
+  "title": "Telegram Network Access",
+  "subtitle": "Stay connected. Get updates. Move faster.",
+  "sections": [
+    {
+      "title": "Channels",
+      "note": "Spot loads, updates and resources",
+      "icon": "megaphone",
+      "action": "Open",
+      "items": [
+        {
+          "name": "USPS BOARD",
+          "handle": "USPS_LIVE_HUB",
+          "icon": "usps"
+        },
+        {
+          "name": "HUB DISPATCH SERVICE",
+          "handle": "MIKE_LOGISTIC077",
+          "icon": "dispatch"
+        },
+        {
+          "name": "DRIVER CHECK-IN HUB",
+          "handle": "DRIVER_CHECKIN_HUB",
+          "icon": "checkin"
+        },
+        {
+          "name": "Vacancy HUB",
+          "handle": "logistics_vacancy_hub",
+          "icon": "vacancy"
+        },
+        {
+          "name": "AMAZON REMOVE | HUB",
+          "handle": "remove_hub007",
+          "icon": "amazon"
+        },
+        {
+          "name": "TRUCKS SELL/BUY HUB",
+          "handle": "TRUCK_BUY",
+          "icon": "truck"
+        }
+      ]
+    },
+    {
+      "title": "Groups",
+      "note": "Connect with drivers and our team",
+      "icon": "users",
+      "action": "Join",
+      "items": [
+        {
+          "name": "Recruiting HUB",
+          "handle": "hrRecruiting_team",
+          "icon": "recruit"
+        },
+        {
+          "name": "USPS HUB",
+          "handle": "USPS_HUB",
+          "icon": "chat"
+        }
+      ]
+    },
+    {
+      "title": "Contact",
+      "note": "Direct support when you need it",
+      "icon": "headset",
+      "action": "Message",
+      "style": "gold",
+      "items": [
+        {
+          "name": "Contact Mike Dispatcher",
+          "handle": "MIKE_dispatcher007",
+          "icon": "support"
+        }
+      ]
+    }
+  ]
+}

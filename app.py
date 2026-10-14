@@ -24,6 +24,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from websockets.asyncio.client import connect
 
 load_dotenv()
@@ -388,6 +389,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=STATIC), name="static")  # rasm, network.json
 
 
 @app.get("/")
