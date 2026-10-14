@@ -92,11 +92,11 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- layout ---------- */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 386px; gap: 18px; align-items: start; padding-top: 4px; padding-bottom: 28px; }
-main { min-width: 0; }
+main { min-width: 0; container: board / inline-size; }
 
 /* ---------- summary panels ---------- */
 .pulse { display: grid; grid-template-columns: 1.32fr .92fr 1.04fr; gap: 16px; }
-.panel { padding: 16px 20px 18px; min-width: 0; }
+.panel { padding: 16px 20px 18px; min-width: 0; container-type: inline-size; }
 .ph { display: flex; align-items: center; gap: 14px; }
 .ph .ic {
   width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; color: var(--blue-hi);
@@ -322,15 +322,10 @@ dialog[open] { animation: slide .22s ease-out; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1440px) { .hero { display: none; } .hstat { margin-left: auto; } }
-@media (max-width: 1280px) {
+@media (max-width: 1400px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .net { position: static; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
   .net-head { grid-column: 1 / -1; }
-}
-@media (max-width: 1180px) {
-  .cols, .load { grid-template-columns: 124px 60px minmax(110px, 1fr) minmax(110px, 1fr) minmax(140px, 1.2fr) 76px 70px 80px 58px 84px; }
-  .c-ss { display: none !important; }
-  .c-po { grid-column: 9; } .c-ac { grid-column: 10; }
 }
 @media (max-width: 1000px) {
   .pulse { grid-template-columns: 1fr 1fr; } .pulse .panel:first-child { grid-column: 1 / -1; }
@@ -356,6 +351,32 @@ dialog[open] { animation: slide .22s ease-out; }
   .check { margin-left: 0; }
   .quick { flex-wrap: wrap; }
   .chips { flex: 1 1 100%; order: -1; }
+  .net { grid-template-columns: 1fr; padding: 12px; }
+}
+
+/* tor panelda status tugmalari bitta qatorga sig'sin */
+@container (max-width: 460px) {
+  .legend { gap: 6px 2px; }
+  .legend button { padding: 6px 8px; gap: 6px; font-size: 15.5px; }
+  .legend button b { font-size: 18px; }
+}
+
+/* Jadval ekran kengligiga emas, o'ziga qolgan joyga moslashadi:
+   Windows 125% masshtabida 1920px ekran brauzer uchun 1536px, o'ng panel bilan jadvalga ~1080px qoladi */
+@container board (max-width: 1230px) {
+  .cols, .load { grid-template-columns: 124px 60px minmax(110px, 1fr) minmax(110px, 1fr) minmax(140px, 1.2fr) 76px 70px 80px 58px 84px; }
+  .c-ss { display: none !important; }
+  .c-po { grid-column: 9; } .c-ac { grid-column: 10; }
+}
+@container board (max-width: 1060px) {
+  .cols, .load { gap: 10px; grid-template-columns: 116px 54px minmax(96px, 1fr) minmax(96px, 1fr) minmax(128px, 1.2fr) 70px 64px 72px 82px; }
+  .cols, .load { padding-left: 14px; padding-right: 14px; }
+  .c-po { display: none !important; }
+  .c-ac { grid-column: 9; }
+  .city { font-size: 17px; }
+  .c-pu { font-size: 15px; } .c-pu small { font-size: 14px; }
+}
+@container board (max-width: 900px) {
   .cols { display: none; }
   .load {
     grid-template-columns: auto auto 1fr auto;
@@ -370,7 +391,6 @@ dialog[open] { animation: slide .22s ease-out; }
   .c-o::before { content: "From"; } .c-d::before { content: "To"; }
   .c-ss, .c-po { display: none !important; }
   .fuse { left: 14px; right: 14px; }
-  .net { grid-template-columns: 1fr; padding: 12px; }
 }
 @media (max-width: 420px) { .clockbox small { display: none; } .livebox { padding: 8px 12px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
