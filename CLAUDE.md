@@ -25,6 +25,7 @@ t.me/s/usps_live_sean ──► Engine.listen_tg() ─┐
 ```
 
 - **`Engine.listen_tg()`** — avval `GET https://t.me/s/<TG_SOURCE>` (oxirgi ~20 post), keyin har `POLL_SEC` (2s) da `POST ...?after=<oxirgi post id>` + `X-Requested-With: XMLHttpRequest` — faqat yangi postlar keladi, yangi bo'lmasa javob `""`. 20 ta kelsa darhol keyingisini oladi. Xatoda 2→4…60s backoff. `tg_parse_page()` / `tg_post_to_load()` postni quyidagi formatdagi yukka o'giradi.
+- **`Engine.listen_bot()`** — bot (`SRC_BOT_TOKEN`, bo'lmasa `BOT_TOKEN`) Sean kanalida **admin** bo'lsa, `getUpdates` long-poll orqali har post `channel_post` bo'lib darhol keladi; `chat.username == TG_SOURCE` bo'lmaganlari (masalan o'zimizning kanal) tashlanadi. Sahifa so'rovi bilan **yonma-yon** ishlaydi — qaysi biri birinchi kelsa o'sha yoziladi, ikkinchisi `INSERT OR IGNORE` da qoladi. Holati `/health` → `bot_source` (`bot`, `admin`, `ok`, `last_post`).
 - **`Engine.listen()`** (eski, `SOURCE=usps_uz`) — `wss://usps.uz/ws/loads/` ga ulanadi. Uzilsa 1→2→4…60s backoff bilan qayta ulanadi. Har ulanishda `catch_up()` REST orqali oxirgi 50 yukni tekshiradi (uzilish paytida o'tkazib yuborilganlar uchun).
 - **`Engine.accept()`** — yukni bazaga yozadi (`order_id` PRIMARY KEY → takrorlanish yo'q), brauzerlarga uzatadi, yangi va "fresh" bo'lsa Telegram navbatiga qo'yadi.
 - **Birinchi ishga tushish** (baza bo'sh): mavjud 50 yuk `SKIPPED` deb yoziladi, kanalga **yuborilmaydi** (kanalni eski yuklar bilan to'ldirmaslik uchun).
@@ -140,6 +141,8 @@ Tugmalar: `📍 Map` → `route_url`; `📋 Board` → `{BOARD_URL}?load={order_
 | `SOURCE` | | `telegram` | `telegram` (Sean kanali) yoki `usps_uz` (eski) |
 | `TG_SOURCE` | | `usps_live_sean` | Manba kanal (ochiq bo'lishi shart) |
 | `POLL_SEC` | | `2` | Kanal necha soniyada tekshiriladi |
+| `TG_BOT_SOURCE` | | `1` (`DRY_RUN` da `0`) | Manbani bot orqali ham olish |
+| `SRC_BOT_TOKEN` | | `BOT_TOKEN` | Manba uchun alohida bot (ixtiyoriy) |
 | `WS_URL`, `REST_URL` | | usps.uz | Faqat `SOURCE=usps_uz` da |
 | `LOAD_TTL_MIN` 30, `MAX_AGE_MIN` 25, `SEND_INTERVAL` 3, `HISTORY_HOURS` 24, `KEEP_DAYS` 30 | | | |
 | `DRY_RUN` | | `0` | `1` → Telegram'ga yubormaydi, konsolga chiqaradi |
@@ -153,7 +156,7 @@ Tugmalar: `📍 Map` → `route_url`; `📋 Board` → `{BOARD_URL}?load={order_
 
 ## Muhim qoidalar (o'zgartirishdan oldin o'qi)
 
-1. **Ikki nusxa bir vaqtda ishlamasin.** Lokal `python app.py` va Railway bir vaqtda ishlasa, har bir yuk kanalga 2 marta tushadi. Lokal test har doim `DRY_RUN=1` bilan, alohida `DB_PATH` bilan.
+1. **Ikki nusxa bir vaqtda ishlamasin.** Bot manbasi (`getUpdates`) bir token bilan ikki joyda ishlasa, yangilanishlarni bir-biridan olib qo'yadi (409) — shuning uchun `DRY_RUN` da `TG_BOT_SOURCE` default o'chiq. Lokal `python app.py` va Railway bir vaqtda ishlasa, har bir yuk kanalga 2 marta tushadi. Lokal test har doim `DRY_RUN=1` bilan, alohida `DB_PATH` bilan.
 2. **Takrorlanishni nazorat qilish** `order_id` PRIMARY KEY + `INSERT OR IGNORE` ga tayanadi — buni buzma.
 3. **Tezlik** — yuk chiqqandan postgacha bir necha soniya. Sinxron/bloklovchi chaqiruvlar qo'shma (hammasi async).
 4. **Sirlar** (`BOT_TOKEN`) hech qachon kodga, logga yoki commitga tushmasin. `.gitignore` da `.env` va `*.db` bor.

@@ -48,6 +48,10 @@ DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 SOURCE = os.getenv("SOURCE", "telegram").strip().lower()  # telegram (Sean kanali) | usps_uz (eski, Ben)
 TG_SOURCE = os.getenv("TG_SOURCE", "usps_live_sean").strip().lstrip("@")  # manba: ochiq Telegram kanal
 POLL_SEC = float(os.getenv("POLL_SEC", "2"))  # kanal necha soniyada bir tekshiriladi
+# Manbani bot orqali ham olish: bot Sean kanalida admin bo'lsa, har post darhol `channel_post` bo'lib keladi.
+# Lokal DRY_RUN da o'chiq — getUpdates bir xil token bilan ikki joyda ishlasa, yangilanishlarni bir-biridan "o'g'irlaydi".
+TG_BOT_SOURCE = os.getenv("TG_BOT_SOURCE", "0" if DRY_RUN else "1") == "1"
+SRC_BOT_TOKEN = os.getenv("SRC_BOT_TOKEN", "").strip() or BOT_TOKEN  # alohida bot bo'lsa; aks holda post qiluvchi bot
 
 SRC_HEADERS = {"Origin": "https://usps.uz", "Referer": "https://usps.uz/board", "User-Agent": "Mozilla/5.0"}
 STATIC = Path(__file__).parent / "static"
@@ -288,9 +292,18 @@ async def send_to_tg(session: aiohttp.ClientSession, load: dict) -> tuple[bool, 
                 if r.status == 400:
                     return False, None
         except Exception as ex:
-            log.warning("Telegram'ga ulanishda xato (%s), qayta urinish", ex)
+            log.warning("Telegram'ga ulanishda xato (%s), qayta urinish", safe_err(ex))
         await asyncio.sleep(2 * (attempt + 1))
     return False, None
+
+
+def safe_err(ex: Exception) -> str:
+    """Xato matni logga tokensiz tushsin (aiohttp xatolari URL'ni, ya'ni tokenni ham yozishi mumkin)."""
+    msg = f"{type(ex).__name__}: {ex}"
+    for tok in {BOT_TOKEN, SRC_BOT_TOKEN}:
+        if tok:
+            msg = msg.replace(tok, "***")
+    return msg
 
 
 def is_fresh(load: dict) -> bool:
@@ -383,6 +396,17 @@ def tg_parse_page(page: str) -> tuple[list[dict], int, int]:
     return loads, top, count
 
 
+def bot_post_to_load(post: dict) -> dict | None:
+    """Bot API `channel_post` -> yuk. Matn sahifadagi bilan bir xil, Map linki inline tugmada."""
+    route_url = None
+    for row in (post.get("reply_markup") or {}).get("inline_keyboard", []):
+        for b in row:
+            if not route_url and "google.com/maps" in str(b.get("url", "")):
+                route_url = b["url"]
+    posted = datetime.fromtimestamp(int(post.get("date") or 0), timezone.utc)
+    return tg_post_to_load(post.get("text") or post.get("caption") or "", posted, route_url)
+
+
 # ---------- Asosiy ish oqimi ----------
 class Engine:
     def __init__(self):
@@ -391,6 +415,9 @@ class Engine:
         self.queue: asyncio.Queue = asyncio.Queue()
         self.session: aiohttp.ClientSession | None = None
         self.source_online = False
+        # bot orqali manba holati — /health da ko'rinadi
+        self.bot_src = {"enabled": SOURCE == "telegram" and TG_BOT_SOURCE, "bot": None, "admin": None,
+                        "ok": False, "last_post": None}
 
     async def accept(self, load: dict, first_run: bool = False):
         if not load.get("order_id"):
@@ -491,6 +518,53 @@ class Engine:
                 continue
             await asyncio.sleep(POLL_SEC)
 
+    async def bot_api(self, method: str, **params):
+        url = f"https://api.telegram.org/bot{SRC_BOT_TOKEN}/{method}"
+        timeout = aiohttp.ClientTimeout(total=params.get("timeout", 0) + 15)
+        async with self.session.post(url, json=params, timeout=timeout) as r:
+            data = await r.json()
+        if not data.get("ok"):
+            raise RuntimeError(f"{method}: {data.get('error_code')} {data.get('description')}")
+        return data["result"]
+
+    async def check_bot_admin(self):
+        try:
+            me = await self.bot_api("getMe")
+            self.bot_src["bot"] = "@" + me.get("username", "")
+            m = await self.bot_api("getChatMember", chat_id="@" + TG_SOURCE, user_id=me["id"])
+            self.bot_src["admin"] = m.get("status") in ("administrator", "creator")
+        except Exception as ex:
+            self.bot_src["admin"] = False
+            log.info("Bot manba tekshiruvi: %s", safe_err(ex))
+        if self.bot_src["admin"]:
+            log.info("Bot %s @%s kanalida admin — postlar darhol keladi", self.bot_src["bot"], TG_SOURCE)
+        else:
+            log.warning("Bot %s @%s kanalida admin emas — manba hozircha faqat sahifa orqali (har %ss)",
+                        self.bot_src["bot"], TG_SOURCE, POLL_SEC)
+
+    async def listen_bot(self):
+        await self.check_bot_admin()
+        offset, backoff = None, 2
+        while True:
+            try:
+                updates = await self.bot_api("getUpdates", offset=offset, timeout=50, allowed_updates=["channel_post"])
+                self.bot_src["ok"], backoff = True, 2
+                for u in updates:
+                    offset = u["update_id"] + 1
+                    post = u.get("channel_post") or {}
+                    if str((post.get("chat") or {}).get("username", "")).lower() != TG_SOURCE.lower():
+                        continue  # boshqa kanal, masalan bot post qiladigan o'zimizning kanal
+                    self.bot_src["admin"] = True
+                    if load := bot_post_to_load(post):
+                        self.bot_src["last_post"] = load["created_at"]
+                        await self.accept(load)
+            except Exception as ex:
+                # 409 — shu token bilan boshqa joyda ham getUpdates ishlayapti (yoki webhook o'rnatilgan)
+                self.bot_src["ok"] = False
+                log.warning("Bot manba xato (%s). %ss dan keyin qayta", safe_err(ex), backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+
     async def sender(self):
         while True:
             load = await self.queue.get()
@@ -516,6 +590,8 @@ class Engine:
             log.warning("BOARD_URL https bo'lmagani uchun kanaldagi postlarda Board tugmasi chiqmaydi")
         source = self.listen_tg() if SOURCE == "telegram" else self.listen()
         self.tasks = [asyncio.create_task(source), asyncio.create_task(self.sender())]
+        if self.bot_src["enabled"]:
+            self.tasks.append(asyncio.create_task(self.listen_bot()))
 
     async def stop(self):
         for t in self.tasks:
@@ -562,7 +638,8 @@ async def api_loads(hours: int = HISTORY_HOURS):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "source_online": engine.source_online, "queue": engine.queue.qsize()}
+    return {"ok": True, "source_online": engine.source_online, "queue": engine.queue.qsize(),
+            "bot_source": engine.bot_src}
 
 
 @app.websocket("/ws")
