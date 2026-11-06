@@ -564,7 +564,9 @@ dialog[open] { animation: slide .22s ease-out; }
   }
   const miles = l => parseFloat(String(l.distance || "").replace(/[^\d.]/g, "")) || 0;
   const created = l => Date.parse(l.created_at);
-  const left = l => created(l) + TTL - now();
+  // tugash vaqti: manba bergan bo'lsa (Sean kanali) o'sha, aks holda created_at + TTL
+  const endsAt = l => (l.ends_at ? Date.parse(l.ends_at) : NaN) || created(l) + TTL;
+  const left = l => endsAt(l) - now();
   function status(l) {
     const ms = left(l);
     if (ms <= 0) return "ended";
@@ -638,7 +640,7 @@ dialog[open] { animation: slide .22s ease-out; }
       <span class="c-st"><span class="badge" style="--h:${hue(sc)}">${esc(sc || "—")}</span></span>
       <span class="c-o">${cityHTML(o)}</span>
       <span class="c-d">${cityHTML(d)}${extra > 0 ? `<span class="via">+${extra} stop${extra > 1 ? "s" : ""} before</span>` : ""}</span>
-      <span class="c-pu">${fmtUS(l.pickup_time, TZ[o.st])}<small>Del ${fmtUS(l.delivery_time, TZ[d.st])}</small></span>
+      <span class="c-pu">${fmtUS(l.pickup_time, l.pickup_tz || TZ[o.st])}${l.delivery_time ? `<small>Del ${fmtUS(l.delivery_time, TZ[d.st])}</small>` : ""}</span>
       <span class="c-mi">${miles(l).toLocaleString("en-US", { maximumFractionDigits: 1 })}<small> mi</small></span>
       <span class="c-ty"><span class="type ${esc(l.load_type)}">${esc(l.load_type || "—")}</span></span>
       <span class="c-en" data-ends>${clock(left(l))}</span>
@@ -775,10 +777,10 @@ dialog[open] { animation: slide .22s ease-out; }
       <dl class="facts">
         <div><dt>Distance</dt><dd>${miles(l).toLocaleString("en-US")} miles</dd></div>
         <div><dt>Driver</dt><dd><span class="type ${esc(l.load_type)}">${esc(l.load_type || "—")}</span></dd></div>
-        <div><dt>Pickup</dt><dd>${fmtUS(l.pickup_time, TZ[o.st])}</dd></div>
-        <div><dt>Delivery</dt><dd>${fmtUS(l.delivery_time, TZ[d.st])}</dd></div>
+        <div><dt>Pickup</dt><dd>${fmtUS(l.pickup_time, l.pickup_tz || TZ[o.st])}</dd></div>
+        ${l.delivery_time ? `<div><dt>Delivery</dt><dd>${fmtUS(l.delivery_time, TZ[d.st])}</dd></div>` : ""}
         <div><dt>Posted</dt><dd>${ET12.format(new Date(created(l)))} ET</dd></div>
-        <div><dt>Bidding ends</dt><dd>${ET12.format(new Date(created(l) + TTL))} ET</dd></div>
+        <div><dt>Bidding ends</dt><dd>${ET12.format(new Date(endsAt(l)))} ET</dd></div>
       </dl>
       <ol class="stops">${stops.map((s, i) => {
         const p = place(s);

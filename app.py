@@ -17,6 +17,7 @@ import sqlite3
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import parse_qs, quote_plus, urlparse
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -44,6 +45,9 @@ DB_PATH = os.getenv("DB_PATH", "loads.db")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
+SOURCE = os.getenv("SOURCE", "telegram").strip().lower()  # telegram (Sean kanali) | usps_uz (eski, Ben)
+TG_SOURCE = os.getenv("TG_SOURCE", "usps_live_sean").strip().lstrip("@")  # manba: ochiq Telegram kanal
+POLL_SEC = float(os.getenv("POLL_SEC", "2"))  # kanal necha soniyada bir tekshiriladi
 
 SRC_HEADERS = {"Origin": "https://usps.uz", "Referer": "https://usps.uz/board", "User-Agent": "Mozilla/5.0"}
 STATIC = Path(__file__).parent / "static"
@@ -146,6 +150,8 @@ def to_public(row) -> dict:
         "delivery_time": d.get("delivery_time"),
         "stops": d.get("stops") or [],
         "stop_addresses": d.get("stop_addresses") or [],
+        "pickup_tz": d.get("pickup_tz"),
+        "ends_at": d.get("ends_at"),
         "state_code": d.get("state_code"),
         "load_type": d.get("load_type"),
         "route_url": d.get("route_url"),
@@ -209,14 +215,21 @@ def format_load(load: dict) -> str:
     ltype = str(load.get("load_type") or "").upper()
     icon = "👥" if ltype == "TEAM" else "👤"
     stops = [city_state(s) for s in (load.get("stops") or [])]
-    ends = (parse_ts(load.get("created_at")) + timedelta(minutes=LOAD_TTL_MIN)).astimezone(ET)
+    if load.get("ends_at"):  # manba tugash vaqtini o'zi bergan
+        ends = parse_ts(load["ends_at"]).astimezone(ET)
+    else:
+        ends = (parse_ts(load.get("created_at")) + timedelta(minutes=LOAD_TTL_MIN)).astimezone(ET)
+    pu_tz = f" {load['pickup_tz']}" if load.get("pickup_tz") else ""
 
     lines = [e(POST_HEADER), "", f"{icon} {e(ltype or '—')} — <code>{e(str(load.get('order_id')))}</code>", ""]
     lines += [f"📍 {e(name)}" for name, _ in stops]
     lines += [
         "",
-        f"⏰ PU: {e(short_dt(load.get('pickup_time')))}",
-        f"📦 DEL: {e(short_dt(load.get('delivery_time')))}",
+        f"⏰ PU: {e(short_dt(load.get('pickup_time')) + pu_tz)}",
+    ]
+    if load.get("delivery_time"):  # Sean kanalida delivery vaqti yo'q
+        lines.append(f"📦 DEL: {e(short_dt(load.get('delivery_time')))}")
+    lines += [
         "",
         f"🚛 Distance: {e(miles_text(load.get('distance')))}",
         f"⏳ Bidding Ends at: {ends.strftime('%I:%M %p')} ET",
@@ -284,6 +297,92 @@ def is_fresh(load: dict) -> bool:
     return now() - parse_ts(load.get("created_at")) < timedelta(minutes=MAX_AGE_MIN)
 
 
+# ---------- Manba: ochiq Telegram kanal (t.me/s/<kanal>) ----------
+TG_WEB = "https://t.me/s/"
+TG_HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+
+def tg_text(fragment: str) -> str:
+    """Post HTML'i -> oddiy matn: <br> yangi qatorga aylanadi, teglar olib tashlanadi."""
+    return html.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", fragment)))
+
+
+def tg_addresses(route_url: str, n: int) -> list[str]:
+    """Map linkidagi to'liq manzillar (origin, waypoints, destination) — faqat soni stoplarga teng
+    va hammasi ko'cha manzili bo'lsa. Ko'pincha linkda faqat shahar turadi, unda bo'sh ro'yxat."""
+    q = parse_qs(urlparse(route_url or "").query)
+    parts = q.get("origin", []) + [w for x in q.get("waypoints", []) for w in x.split("|")] + q.get("destination", [])
+    parts = [p.strip() for p in parts if p.strip()]
+    return parts if len(parts) == n and all(re.match(r"\d", p) for p in parts) else []
+
+
+def tg_post_to_load(text: str, posted: datetime, route_url: str | None) -> dict | None:
+    """Sean kanalidagi post matnini usps.uz formatidagi yukka o'giradi; yuk posti bo'lmasa None.
+    Namuna:  👥 TEAM - 129178208 / 📍 HENDERSON, NV / 📍 MEMPHIS, TN /
+             ⏰ PU: 11/06 04:30 AM PT / 🚛 Distance: 1,594.2 miles / ⏳ Bidding Ends at: 05:14 AM ET"""
+    head = re.search(r"\b(TEAM|SOLO)\b\s*[-–—]\s*(\d{6,})", text)
+    stops = [s.strip() for s in re.findall(r"📍\s*([^\n]+)", text) if s.strip()]
+    if not head or len(stops) < 2:
+        return None
+    posted_et = posted.astimezone(ET)
+
+    pickup_time = pickup_tz = None
+    if m := re.search(r"PU:\s*(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})\s*([AP]M)(?:[ \t]+([A-Z]{1,4})\b)?", text):
+        mo, d = int(m.group(1)), int(m.group(2))
+        year = posted_et.year + (1 if mo < posted_et.month - 6 else 0)  # dekabrda chiqqan yanvar yuki
+        pickup_time = f"{mo:02d}/{d:02d}/{year} {int(m.group(3)):02d}:{m.group(4)} {m.group(5)}"
+        pickup_tz = m.group(6)
+
+    ends_at = None
+    if m := re.search(r"Bidding Ends at:\s*(\d{1,2}):(\d{2})\s*([AP]M)", text):
+        h = int(m.group(1)) % 12 + (12 if m.group(3) == "PM" else 0)
+        end = posted_et.replace(hour=h, minute=int(m.group(2)), second=0, microsecond=0)
+        if end < posted_et - timedelta(hours=2):
+            end += timedelta(days=1)  # yarim tundan o'tib tugaydi
+        ends_at = end.astimezone(timezone.utc).isoformat()
+
+    dist = re.search(r"Distance:\s*([\d,.]+)\s*mi", text)
+    if not route_url:
+        route_url = ("https://www.google.com/maps/dir/?api=1&origin=" + quote_plus(stops[0])
+                     + "&destination=" + quote_plus(stops[-1]) + "&travelmode=driving")
+    return {
+        "order_id": head.group(2),
+        "load_type": head.group(1),
+        "stops": stops,
+        "stop_addresses": tg_addresses(route_url, len(stops)),
+        "pickup_time": pickup_time,
+        "pickup_tz": pickup_tz,
+        "delivery_time": None,
+        "distance": f"{dist.group(1)} miles" if dist else None,
+        "state_code": city_state(stops[0])[1],
+        "route_url": route_url,
+        "created_at": posted.astimezone(timezone.utc).isoformat(),
+        "ends_at": ends_at,
+    }
+
+
+def tg_parse_page(page: str) -> tuple[list[dict], int, int]:
+    """t.me/s sahifasi -> (yuklar eskidan yangiga, eng katta post id, postlar soni)."""
+    loads, top, count = [], 0, 0
+    for block in re.split(r'(?=<div class="tgme_widget_message_wrap)', page)[1:]:
+        pid = re.search(r'data-post="[^"/]+/(\d+)"', block)
+        if not pid:
+            continue
+        count += 1
+        top = max(top, int(pid.group(1)))
+        body = re.search(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', block, re.S)
+        when = re.search(r'<time datetime="([^"]+)"', block)
+        if not (body and when):
+            continue
+        btn = re.search(r'<a\b[^>]*tgme_widget_message_inline_button[^>]*>', block)
+        href = re.search(r'href="([^"]+)"', btn.group(0)) if btn else None
+        load = tg_post_to_load(tg_text(body.group(1)), parse_ts(when.group(1)),
+                               html.unescape(href.group(1)) if href else None)
+        if load:
+            loads.append(load)
+    return loads, top, count
+
+
 # ---------- Asosiy ish oqimi ----------
 class Engine:
     def __init__(self):
@@ -347,6 +446,51 @@ class Engine:
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
 
+    async def set_online(self, ok: bool):
+        if ok != self.source_online:
+            self.source_online = ok
+            await self.hub.broadcast({"type": "source", "online": ok})
+
+    async def tg_fetch(self, after: int | None) -> str:
+        url = TG_WEB + TG_SOURCE
+        timeout = aiohttp.ClientTimeout(total=15)
+        if after is None:  # birinchi so'rov: oxirgi ~20 post
+            async with self.session.get(url, headers=TG_HEADERS, timeout=timeout) as r:
+                r.raise_for_status()
+                return await r.text()
+        # faqat `after` dan keyingi postlar; yangi post bo'lmasa javob '""'
+        headers = {**TG_HEADERS, "X-Requested-With": "XMLHttpRequest"}
+        async with self.session.post(f"{url}?after={after}", data=b"", headers=headers, timeout=timeout) as r:
+            r.raise_for_status()
+            body = await r.text()
+        return json.loads(body) if body.strip() else ""
+
+    async def listen_tg(self):
+        log.info("Manba: https://t.me/s/%s (har %ss)", TG_SOURCE, POLL_SEC)
+        last, backoff = None, POLL_SEC
+        while True:
+            try:
+                loads, top, count = tg_parse_page(await self.tg_fetch(last))
+                if last is None and not top:
+                    raise RuntimeError("kanal sahifasida post topilmadi")
+                first = last is None and self.store.is_empty()
+                for ld in loads:
+                    await self.accept(ld, first_run=first)
+                if first:
+                    log.info("Birinchi ishga tushish: %d ta mavjud yuk bazaga yozildi (kanalga yuborilmaydi)", len(loads))
+                last = max(last or 0, top)
+                await self.set_online(True)
+                backoff = POLL_SEC
+                if count >= 20:
+                    continue  # bir so'rovga sig'madi — darhol keyingisini olamiz
+            except Exception as ex:
+                await self.set_online(False)
+                backoff = min(backoff * 2, 60)
+                log.warning("Telegram manba xato (%s). %ss dan keyin qayta", ex, backoff)
+                await asyncio.sleep(backoff)
+                continue
+            await asyncio.sleep(POLL_SEC)
+
     async def sender(self):
         while True:
             load = await self.queue.get()
@@ -370,7 +514,8 @@ class Engine:
             self.queue.put_nowait(ld)
         if not board_link_ok():
             log.warning("BOARD_URL https bo'lmagani uchun kanaldagi postlarda Board tugmasi chiqmaydi")
-        self.tasks = [asyncio.create_task(self.listen()), asyncio.create_task(self.sender())]
+        source = self.listen_tg() if SOURCE == "telegram" else self.listen()
+        self.tasks = [asyncio.create_task(source), asyncio.create_task(self.sender())]
 
     async def stop(self):
         for t in self.tasks:

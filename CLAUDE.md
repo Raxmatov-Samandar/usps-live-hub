@@ -9,7 +9,7 @@ USPS spot yuklarini (USPS Freight Auction / Load Bid) real vaqtda olib:
 1. **Telegram kanalga** (`@USPS_LIVE_HUB`) har bir yangi yukni chiroyli formatda post qiladi (📍 Map + 📋 Board tugmalari bilan).
 2. **O'z web board'ida** (`https://www.uspshub.uz/board`) jonli jadval ko'rinishida ko'rsatadi.
 
-Ma'lumot manbai — `usps.uz` (Ben'ning tizimi). Ben'ning ukasi bilan birga ishlanmoqda, ya'ni manbadan foydalanish ular bilan kelishilgan. Yuklar USPS'da **30 daqiqada** tugaydi, shuning uchun tezlik eng muhim talab.
+Ma'lumot manbai (2026-11-06 dan) — **Sean'ning ochiq Telegram kanali** `@usps_live_sean` ("USPS Live Bids (by Sean)"), `SOURCE=telegram`. Manbadan foydalanish Sean bilan kelishilgan. Eski manba `usps.uz` (Ben'ning tizimi) kodda qoldirilgan: `SOURCE=usps_uz` bilan qaytariladi. Yuklar USPS'da **30 daqiqada** tugaydi, shuning uchun tezlik eng muhim talab.
 
 Brend: **HUB Logistics** (logo: oq "HUB" harflari + qizil uchburchak qism, `#FF101C`).
 
@@ -18,18 +18,37 @@ Brend: **HUB Logistics** (logo: oq "HUB" harflari + qizil uchburchak qism, `#FF1
 Hammasi **bitta Python jarayon** (`app.py`) ichida, asyncio + FastAPI:
 
 ```
-usps.uz WebSocket ──► Engine.listen() ──► Store (SQLite) ──► Hub.broadcast() ──► brauzerlar (/ws)
-usps.uz REST (catch-up) ─┘                     │
+t.me/s/usps_live_sean ──► Engine.listen_tg() ─┐
+  (yoki usps.uz WS+REST ──► Engine.listen())  ├─► Store (SQLite) ──► Hub.broadcast() ──► brauzerlar (/ws)
+                                              │
                                                └──► queue ──► Engine.sender() ──► Telegram Bot API
 ```
 
-- **`Engine.listen()`** — `wss://usps.uz/ws/loads/` ga ulanadi. Uzilsa 1→2→4…60s backoff bilan qayta ulanadi. Har ulanishda `catch_up()` REST orqali oxirgi 50 yukni tekshiradi (uzilish paytida o'tkazib yuborilganlar uchun).
+- **`Engine.listen_tg()`** — avval `GET https://t.me/s/<TG_SOURCE>` (oxirgi ~20 post), keyin har `POLL_SEC` (2s) da `POST ...?after=<oxirgi post id>` + `X-Requested-With: XMLHttpRequest` — faqat yangi postlar keladi, yangi bo'lmasa javob `""`. 20 ta kelsa darhol keyingisini oladi. Xatoda 2→4…60s backoff. `tg_parse_page()` / `tg_post_to_load()` postni quyidagi formatdagi yukka o'giradi.
+- **`Engine.listen()`** (eski, `SOURCE=usps_uz`) — `wss://usps.uz/ws/loads/` ga ulanadi. Uzilsa 1→2→4…60s backoff bilan qayta ulanadi. Har ulanishda `catch_up()` REST orqali oxirgi 50 yukni tekshiradi (uzilish paytida o'tkazib yuborilganlar uchun).
 - **`Engine.accept()`** — yukni bazaga yozadi (`order_id` PRIMARY KEY → takrorlanish yo'q), brauzerlarga uzatadi, yangi va "fresh" bo'lsa Telegram navbatiga qo'yadi.
 - **Birinchi ishga tushish** (baza bo'sh): mavjud 50 yuk `SKIPPED` deb yoziladi, kanalga **yuborilmaydi** (kanalni eski yuklar bilan to'ldirmaslik uchun).
 - **`Engine.sender()`** — navbatdan olib Telegram'ga yuboradi, postlar orasida `SEND_INTERVAL` (3s) — Telegram kanal limiti ~20 xabar/daqiqa. 429 bo'lsa `retry_after` kutadi. Yuborishdan oldin yana `is_fresh()` tekshiradi.
 - **`Hub`** — board sahifasidagi brauzerlarga WebSocket orqali `{"type":"load"}` va `{"type":"source","online":bool}` xabarlarini uzatadi.
 
-### Manba ma'lumot formati (usps.uz WS xabari va REST `results[]` elementi)
+### Sean kanali posti → yuk
+```
+✉️ USPS by Sean
+👥 TEAM - 129178208
+📍 HENDERSON, NV
+📍 MEMPHIS, TN                 (multi-stop bo'lishi mumkin)
+⏰ PU: 11/06 04:30 AM PT
+      Time Left to PU: 2h 44m
+🚛 Distance: 1,594.2 miles
+⏳ Bidding Ends at: 05:14 AM ET
+[📍 Load Route] tugmasi — Google Maps; ba'zan to'liq ko'cha manzillari bilan (→ stop_addresses)
+```
+- `created_at` = postning Telegram vaqti; `ends_at` = "Bidding Ends at" (ET, post sanasiga bog'lab, yarim tundan o'tsa +1 kun). Board va Telegram post `ends_at` bo'lsa uni ishlatadi, yo'q bo'lsa `created_at + LOAD_TTL_MIN`.
+- `pickup_time` yil qo'shib `MM/DD/YYYY hh:mm AM` ga keltiriladi, vaqt mintaqasi alohida `pickup_tz` da (PT/CT/ET…).
+- **Delivery vaqti yo'q** — `delivery_time: null`; board va post "DEL" qatorini ko'rsatmaydi.
+- Yuk posti bo'lmagan postlar (e'lon va h.k.) tashlab yuboriladi, lekin `after` id baribir oldinga suriladi.
+
+### Eski manba formati (usps.uz WS xabari va REST `results[]` elementi)
 ```json
 {
   "id": 12399, "order_id": "125978026",
@@ -118,7 +137,10 @@ Tugmalar: `📍 Map` → `route_url`; `📋 Board` → `{BOARD_URL}?load={order_
 | `POST_HEADER` | | `✉️ USPS by MIKE` | |
 | `PORT` | | `8000` | Railway domenlari ham 8000-portga yo'naltirilgan — mos bo'lishi shart |
 | `DB_PATH` | | `loads.db` | Railway'da `/data/loads.db` (Volume) |
-| `WS_URL`, `REST_URL` | | usps.uz | |
+| `SOURCE` | | `telegram` | `telegram` (Sean kanali) yoki `usps_uz` (eski) |
+| `TG_SOURCE` | | `usps_live_sean` | Manba kanal (ochiq bo'lishi shart) |
+| `POLL_SEC` | | `2` | Kanal necha soniyada tekshiriladi |
+| `WS_URL`, `REST_URL` | | usps.uz | Faqat `SOURCE=usps_uz` da |
 | `LOAD_TTL_MIN` 30, `MAX_AGE_MIN` 25, `SEND_INTERVAL` 3, `HISTORY_HOURS` 24, `KEEP_DAYS` 30 | | | |
 | `DRY_RUN` | | `0` | `1` → Telegram'ga yubormaydi, konsolga chiqaradi |
 
